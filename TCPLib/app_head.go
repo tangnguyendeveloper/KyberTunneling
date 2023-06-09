@@ -61,10 +61,6 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	defer session_conn.Close()
 	defer client_conn.Close()
 
-	timeout := 3 * time.Second
-	session_conn.SetDeadline(time.Now().Add(timeout))
-	client_conn.SetDeadline(time.Now().Add(timeout))
-
 	go func() {
 		if _, err := io.Copy(client_conn, session_conn); err != nil {
 			log.Printf("Failed forwarding to App: %s\n", err)
