@@ -2,6 +2,8 @@ package TCPlib
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -61,13 +63,29 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	defer session_conn.Close()
 	defer client_conn.Close()
 
+	key := []byte("1234567890abohtdgetonahuytekhu@%")
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
+		return
+	}
+
+	iv := make([]byte, aes.BlockSize)
+	stream := cipher.NewCTR(block, iv)
+
 	go func() {
-		if _, err := io.Copy(client_conn, session_conn); err != nil {
+
+		decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
+
+		if _, err := io.Copy(client_conn, decryptedReader); err != nil {
 			log.Printf("Failed forwarding to App: %s\n", err)
 		}
 	}()
 
-	if _, err := io.Copy(session_conn, client_conn); err != nil {
+	encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
+
+	if _, err := io.Copy(encryptedWriter, client_conn); err != nil {
 		log.Printf("Failed forwarding to Cloud: %s\n", err)
 	}
 
