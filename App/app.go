@@ -8,7 +8,7 @@ import (
 
 func main() {
 	const (
-		cloud_host = "127.0.0.1"
+		cloud_host = "27.71.25.238"
 		cloud_port = 443
 
 		bind_host = "127.0.0.1"

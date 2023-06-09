@@ -62,13 +62,13 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	defer client_conn.Close()
 
 	go func() {
-		if _, err := io.Copy(session_conn, client_conn); err != nil {
-			log.Printf("Failed forwarding to Cloud: %s\n", err)
+		if _, err := io.Copy(client_conn, session_conn); err != nil {
+			log.Printf("Failed forwarding to App: %s\n", err)
 		}
 	}()
 
-	if _, err := io.Copy(client_conn, session_conn); err != nil {
-		log.Printf("Failed forwarding to Client: %s\n", err)
+	if _, err := io.Copy(session_conn, client_conn); err != nil {
+		log.Printf("Failed forwarding to Cloud: %s\n", err)
 	}
 }
 

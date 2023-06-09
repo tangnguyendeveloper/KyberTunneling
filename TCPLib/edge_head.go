@@ -117,13 +117,13 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 	defer session_conn.Close()
 
 	go func() {
-		if _, err := io.Copy(service_conn, session_conn); err != nil {
-			log.Printf("Failed forwarding to Service: %s\n", err)
+		if _, err := io.Copy(session_conn, service_conn); err != nil {
+			log.Printf("Failed forwarding to Cloud: %s\n", err)
 		}
 	}()
 
-	if _, err := io.Copy(session_conn, service_conn); err != nil {
-		log.Printf("Failed forwarding to Cloud: %s\n", err)
+	if _, err := io.Copy(service_conn, session_conn); err != nil {
+		log.Printf("Failed forwarding to Service: %s\n", err)
 	}
 }
 
