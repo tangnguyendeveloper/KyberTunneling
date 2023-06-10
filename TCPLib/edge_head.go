@@ -2,8 +2,6 @@ package TCPlib
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -114,98 +112,14 @@ func (ec *EdgeHead) reconnect() {
 	}
 }
 
-// func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
-// 	key := []byte("1234567890abohtdgetonahuytekhu@%")
-
-// 	block, err := aes.NewCipher(key)
-// 	if err != nil {
-// 		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
-// 		return
-// 	}
-
-// 	iv := make([]byte, aes.BlockSize)
-// 	stream := cipher.NewCTR(block, iv)
-
-// 	defer session_conn.Close()
-// 	defer service_conn.Close()
-
-// 	go func() {
-
-// 		encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
-
-// 		buffer := make([]byte, MAX_TCP_BUFFER)
-
-// 		if _, err := io.CopyBuffer(encryptedWriter, service_conn, buffer); err != nil {
-// 			log.Printf("Failed forwarding to Cloud: %s\n", err)
-// 		}
-// 	}()
-
-// 	decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
-
-// 	buffer := make([]byte, MAX_TCP_BUFFER)
-
-// 	if _, err := io.CopyBuffer(service_conn, decryptedReader, buffer); err != nil {
-// 		log.Printf("Failed forwarding to Service: %s\n", err)
-// 	}
-
-// }
-
 func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
-	key := []byte("1234567890abohtdgetonahuytekhu@%")
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
-		return
-	}
-
-	iv := make([]byte, aes.BlockSize)
-	stream := cipher.NewCTR(block, iv)
 
 	defer session_conn.Close()
 	defer service_conn.Close()
 
-	go func() {
-		encryptedWriter := &cipher.StreamWriter{S: stream, W: session_conn}
+	go io.Copy(service_conn, session_conn)
+	io.Copy(session_conn, service_conn)
 
-		buffer := make([]byte, MAX_TCP_BUFFER)
-
-		for {
-			n, err := service_conn.Read(buffer)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("Failed forwarding to Cloud: %s\n", err)
-				}
-				break
-			}
-
-			_, err = encryptedWriter.Write(buffer[:n])
-			if err != nil {
-				log.Printf("Failed forwarding to Cloud: %s\n", err)
-				break
-			}
-		}
-	}()
-
-	decryptedReader := &cipher.StreamReader{S: stream, R: session_conn}
-
-	buffer := make([]byte, MAX_TCP_BUFFER)
-
-	for {
-		n, err := decryptedReader.Read(buffer)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("Failed forwarding to Service: %s\n", err)
-			}
-			break
-		}
-
-		_, err = service_conn.Write(buffer[:n])
-		if err != nil {
-			log.Printf("Failed forwarding to Service: %s\n", err)
-			break
-		}
-	}
 }
 
 func sendOpenLinkResponse(conn net.Conn, open_link_request *CommandMessage) bool {

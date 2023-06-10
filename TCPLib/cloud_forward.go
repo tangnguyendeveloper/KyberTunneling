@@ -110,15 +110,8 @@ func (c_fw *CloudForwarder) forward(edge_conn net.Conn, app_conn net.Conn) {
 	defer s_conn.Close()
 	defer app_conn.Close()
 
-	go func() {
-		if _, err := io.Copy(s_conn, app_conn); err != nil {
-			log.Printf("Failed forwarding to Edge: %s\n", err)
-		}
-	}()
-
-	if _, err := io.Copy(app_conn, s_conn); err != nil {
-		log.Printf("Failed forwarding to App: %s\n", err)
-	}
+	go io.Copy(s_conn, app_conn)
+	io.Copy(app_conn, s_conn)
 
 }
 
