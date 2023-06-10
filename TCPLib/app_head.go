@@ -2,14 +2,13 @@ package TCPlib
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"time"
+
+	"github.com/tangnguyendeveloper/KyberTunneling/CryptoUtilities"
 )
 
 type AppHead struct {
@@ -60,34 +59,142 @@ func (ac *AppHead) handleConnection(conn net.Conn) {
 }
 
 func appForwarding(session_conn net.Conn, client_conn net.Conn) {
-	defer session_conn.Close()
-	defer client_conn.Close()
+
+	// key := []byte("1234567890abohtdgetonahuytekhu@%")
+
+	// block, err := aes.NewCipher(key)
+	// if err != nil {
+	// 	log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
+	// 	return
+	// }
+
+	// iv := make([]byte, aes.BlockSize)
+	// stream := cipher.NewCTR(block, iv)
+
+	// defer session_conn.Close()
+	// defer client_conn.Close()
+
+	// go func() {
+
+	// 	decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
+
+	// 	if _, err := io.Copy(client_conn, decryptedReader); err != nil {
+	// 		log.Printf("Failed forwarding to App: %s\n", err)
+	// 	}
+	// }()
+
+	// encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
+
+	// if _, err := io.Copy(encryptedWriter, client_conn); err != nil {
+	// 	log.Printf("Failed forwarding to Cloud: %s\n", err)
+	// }
 
 	key := []byte("1234567890abohtdgetonahuytekhu@%")
+	var done bool = false
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
+	go func() {
+		client_buffer := make([]byte, 4096)
+		length := make([]byte, 2)
+
+		for {
+			err := client_conn.SetReadDeadline(time.Now().Add(time.Second * 2))
+			if err != nil {
+				log.Printf("ERROR: set receive timeout client_conn, %s\n", err)
+				break
+			}
+			n, err := client_conn.Read(client_buffer)
+			if err != nil {
+				log.Printf("ERROR: Receive from App, %s\n", err)
+				break
+			}
+
+			if n < 1 {
+				continue
+			}
+
+			ciphertext, err := CryptoUtilities.Encrypt(key, client_buffer[:n])
+			if err != nil {
+				log.Printf("ERROR: AES Encrypt, %s\n", err)
+				break
+			}
+
+			n = len(ciphertext)
+			binary.BigEndian.PutUint16(length, uint16(n))
+
+			err = session_conn.SetWriteDeadline(time.Now().Add(time.Second * 5))
+			if err != nil {
+				log.Printf("ERROR: set send timeout session_conn, %s\n", err)
+				break
+			}
+
+			_, err = session_conn.Write(append(length, ciphertext...))
+			if err != nil {
+				log.Printf("ERROR: Forward to Cloud, %s\n", err)
+				break
+			}
+
+		}
+
+		client_conn.Close()
+		session_conn.Close()
+
+		done = true
+
+	}()
+
+	length1 := make([]byte, 2)
+
+	for {
+		err := session_conn.SetReadDeadline(time.Now().Add(time.Second * 5))
+		if err != nil {
+			log.Printf("ERROR: set receive timeout session_conn, %s\n", err)
+			break
+		}
+
+		n, _ := session_conn.Read(length1)
+		if n != 2 {
+			continue
+		}
+
+		lb := binary.BigEndian.Uint16(length1)
+		session_buffer := make([]byte, lb)
+
+		n, err = session_conn.Read(session_buffer)
+		if err != nil {
+			log.Printf("ERROR: Receive from Cloud, %s\n", err)
+			break
+		}
+
+		if n != int(lb) {
+			continue
+		}
+
+		plaintext, err := CryptoUtilities.Decrypt(key, session_buffer)
+		if err != nil {
+			log.Printf("ERROR: AES Decrypt, %s\n", err)
+			break
+		}
+
+		err = client_conn.SetWriteDeadline(time.Now().Add(time.Second * 2))
+		if err != nil {
+			log.Printf("ERROR: set send timeout client_conn, %s\n", err)
+			break
+		}
+
+		_, err = client_conn.Write(plaintext)
+		if err != nil {
+			log.Printf("ERROR: Forward to App, %s\n", err)
+			break
+		}
+
+	}
+
+	if done {
 		return
 	}
 
-	iv := make([]byte, aes.BlockSize)
-	stream := cipher.NewCTR(block, iv)
-
-	go func() {
-
-		decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
-
-		if _, err := io.Copy(client_conn, decryptedReader); err != nil {
-			log.Printf("Failed forwarding to App: %s\n", err)
-		}
-	}()
-
-	encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
-
-	if _, err := io.Copy(encryptedWriter, client_conn); err != nil {
-		log.Printf("Failed forwarding to Cloud: %s\n", err)
-	}
+	client_conn.Close()
+	session_conn.Close()
 
 }
 

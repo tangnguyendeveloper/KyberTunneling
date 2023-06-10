@@ -2,14 +2,14 @@ package TCPlib
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"time"
+
+	"github.com/tangnguyendeveloper/KyberTunneling/CryptoUtilities"
 )
 
 type EdgeHead struct {
@@ -115,31 +115,141 @@ func (ec *EdgeHead) reconnect() {
 }
 
 func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
-	key := []byte("1234567890abohtdgetonahuytekhu@%")
+	// key := []byte("1234567890abohtdgetonahuytekhu@%")
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
+	// block, err := aes.NewCipher(key)
+	// if err != nil {
+	// 	log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
+	// 	return
+	// }
+
+	// iv := make([]byte, aes.BlockSize)
+	// stream := cipher.NewCTR(block, iv)
+
+	// defer session_conn.Close()
+	// defer service_conn.Close()
+
+	// go func() {
+
+	// 	encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
+
+	// 	if _, err := io.Copy(encryptedWriter, service_conn); err != nil {
+	// 		log.Printf("Failed forwarding to Cloud: %s\n", err)
+	// 	}
+	// }()
+
+	// decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
+
+	// if _, err := io.Copy(service_conn, decryptedReader); err != nil {
+	// 	log.Printf("Failed forwarding to Service: %s\n", err)
+	// }
+
+	key := []byte("1234567890abohtdgetonahuytekhu@%")
+	var done bool = false
+
+	go func() {
+		service_buffer := make([]byte, 4096)
+		length := make([]byte, 2)
+
+		for {
+			err := service_conn.SetReadDeadline(time.Now().Add(time.Second * 2))
+			if err != nil {
+				log.Printf("ERROR: set receive timeout service_conn, %s\n", err)
+				break
+			}
+			n, err := service_conn.Read(service_buffer)
+			if err != nil {
+				log.Printf("ERROR: Receive from Service, %s\n", err)
+				break
+			}
+
+			if n < 1 {
+				continue
+			}
+
+			ciphertext, err := CryptoUtilities.Encrypt(key, service_buffer[:n])
+			if err != nil {
+				log.Printf("ERROR: AES Encrypt, %s\n", err)
+				break
+			}
+
+			n = len(ciphertext)
+			binary.BigEndian.PutUint16(length, uint16(n))
+
+			err = session_conn.SetWriteDeadline(time.Now().Add(time.Second * 5))
+			if err != nil {
+				log.Printf("ERROR: set send timeout session_conn, %s\n", err)
+				break
+			}
+
+			_, err = session_conn.Write(append(length, ciphertext...))
+			if err != nil {
+				log.Printf("ERROR: Forward to Cloud, %s\n", err)
+				break
+			}
+
+		}
+
+		service_conn.Close()
+		session_conn.Close()
+
+		done = true
+
+	}()
+
+	length1 := make([]byte, 2)
+
+	for {
+		err := session_conn.SetReadDeadline(time.Now().Add(time.Second * 5))
+		if err != nil {
+			log.Printf("ERROR: set receive timeout session_conn, %s\n", err)
+			break
+		}
+
+		n, _ := session_conn.Read(length1)
+		if n != 2 {
+			continue
+		}
+
+		lb := binary.BigEndian.Uint16(length1)
+		session_buffer := make([]byte, lb)
+
+		n, err = session_conn.Read(session_buffer)
+		if err != nil {
+			log.Printf("ERROR: Receive from Cloud, %s\n", err)
+			break
+		}
+
+		if n != int(lb) {
+			continue
+		}
+
+		plaintext, err := CryptoUtilities.Decrypt(key, session_buffer)
+		if err != nil {
+			log.Printf("ERROR: AES Decrypt, %s\n", err)
+			break
+		}
+
+		err = service_conn.SetWriteDeadline(time.Now().Add(time.Second * 2))
+		if err != nil {
+			log.Printf("ERROR: set send timeout service_conn, %s\n", err)
+			break
+		}
+
+		_, err = service_conn.Write(plaintext)
+		if err != nil {
+			log.Printf("ERROR: Forward to Service, %s\n", err)
+			break
+		}
+
+	}
+
+	if done {
 		return
 	}
 
-	iv := make([]byte, aes.BlockSize)
-	stream := cipher.NewCTR(block, iv)
-
-	go func() {
-
-		encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
-
-		if _, err := io.Copy(encryptedWriter, service_conn); err != nil {
-			log.Printf("Failed forwarding to Cloud: %s\n", err)
-		}
-	}()
-
-	decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
-
-	if _, err := io.Copy(service_conn, decryptedReader); err != nil {
-		log.Printf("Failed forwarding to Service: %s\n", err)
-	}
+	service_conn.Close()
+	session_conn.Close()
 }
 
 func sendOpenLinkResponse(conn net.Conn, open_link_request *CommandMessage) bool {
