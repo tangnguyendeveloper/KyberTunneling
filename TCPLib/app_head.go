@@ -97,11 +97,6 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 		length := make([]byte, 2)
 
 		for {
-			err := client_conn.SetReadDeadline(time.Now().Add(time.Second * 2))
-			if err != nil {
-				log.Printf("ERROR: set receive timeout client_conn, %s\n", err)
-				break
-			}
 			n, err := client_conn.Read(client_buffer)
 			if err != nil {
 				log.Printf("ERROR: Receive from App, %s\n", err)
@@ -121,12 +116,6 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 			n = len(ciphertext)
 			binary.BigEndian.PutUint16(length, uint16(n))
 
-			err = session_conn.SetWriteDeadline(time.Now().Add(time.Second * 5))
-			if err != nil {
-				log.Printf("ERROR: set send timeout session_conn, %s\n", err)
-				break
-			}
-
 			_, err = session_conn.Write(append(length, ciphertext...))
 			if err != nil {
 				log.Printf("ERROR: Forward to Cloud, %s\n", err)
@@ -145,11 +134,6 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	length1 := make([]byte, 2)
 
 	for {
-		err := session_conn.SetReadDeadline(time.Now().Add(time.Second * 5))
-		if err != nil {
-			log.Printf("ERROR: set receive timeout session_conn, %s\n", err)
-			break
-		}
 
 		n, _ := session_conn.Read(length1)
 		if n != 2 {
@@ -159,7 +143,7 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 		lb := binary.BigEndian.Uint16(length1)
 		session_buffer := make([]byte, lb)
 
-		n, err = session_conn.Read(session_buffer)
+		n, err := session_conn.Read(session_buffer)
 		if err != nil {
 			log.Printf("ERROR: Receive from Cloud, %s\n", err)
 			break
@@ -172,12 +156,6 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 		plaintext, err := CryptoUtilities.Decrypt(key, session_buffer)
 		if err != nil {
 			log.Printf("ERROR: AES Decrypt, %s\n", err)
-			break
-		}
-
-		err = client_conn.SetWriteDeadline(time.Now().Add(time.Second * 2))
-		if err != nil {
-			log.Printf("ERROR: set send timeout client_conn, %s\n", err)
 			break
 		}
 
