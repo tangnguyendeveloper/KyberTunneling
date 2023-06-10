@@ -59,10 +59,45 @@ func (ac *AppHead) handleConnection(conn net.Conn) {
 
 }
 
+// func appForwarding(session_conn net.Conn, client_conn net.Conn) {
+
+// 	key := []byte("1234567890abohtdgetonahuytekhu@%")
+
+// 	block, err := aes.NewCipher(key)
+// 	if err != nil {
+// 		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
+// 		return
+// 	}
+
+// 	iv := make([]byte, aes.BlockSize)
+// 	stream := cipher.NewCTR(block, iv)
+
+// 	defer session_conn.Close()
+// 	defer client_conn.Close()
+
+// 	go func() {
+
+// 		decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
+
+// 		buffer := make([]byte, MAX_TCP_BUFFER)
+
+// 		if _, err := io.CopyBuffer(client_conn, decryptedReader, buffer); err != nil {
+// 			log.Printf("Failed forwarding to App: %s\n", err)
+// 		}
+// 	}()
+
+// 	encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
+
+// 	buffer := make([]byte, MAX_TCP_BUFFER)
+
+// 	if _, err := io.CopyBuffer(encryptedWriter, client_conn, buffer); err != nil {
+// 		log.Printf("Failed forwarding to Cloud: %s\n", err)
+// 	}
+
+// }
+
 func appForwarding(session_conn net.Conn, client_conn net.Conn) {
-
 	key := []byte("1234567890abohtdgetonahuytekhu@%")
-
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Printf("ERROR: Failed to create AES cipher: %s\n", err)
@@ -76,24 +111,44 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	defer client_conn.Close()
 
 	go func() {
+		decryptedReader := &cipher.StreamReader{S: stream, R: session_conn}
 
-		decryptedReader := cipher.StreamReader{S: stream, R: session_conn}
+		buffer := make([]byte, MAX_TCP_BUFFER) // Adjust the buffer size as needed
+		for {
+			n, err := decryptedReader.Read(buffer)
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("Failed forwarding to App: %s\n", err)
+				}
+				break
+			}
 
-		buffer := make([]byte, MAX_TCP_BUFFER)
-
-		if _, err := io.CopyBuffer(client_conn, decryptedReader, buffer); err != nil {
-			log.Printf("Failed forwarding to App: %s\n", err)
+			_, err = client_conn.Write(buffer[:n])
+			if err != nil {
+				log.Printf("Failed forwarding to App: %s\n", err)
+				break
+			}
 		}
 	}()
 
-	encryptedWriter := cipher.StreamWriter{S: stream, W: session_conn}
+	encryptedWriter := &cipher.StreamWriter{S: stream, W: session_conn}
 
-	buffer := make([]byte, MAX_TCP_BUFFER)
+	buffer := make([]byte, MAX_TCP_BUFFER) // Adjust the buffer size as needed
+	for {
+		n, err := client_conn.Read(buffer)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("Failed forwarding to Cloud: %s\n", err)
+			}
+			break
+		}
 
-	if _, err := io.CopyBuffer(encryptedWriter, client_conn, buffer); err != nil {
-		log.Printf("Failed forwarding to Cloud: %s\n", err)
+		_, err = encryptedWriter.Write(buffer[:n])
+		if err != nil {
+			log.Printf("Failed forwarding to Cloud: %s\n", err)
+			break
+		}
 	}
-
 }
 
 func (ac AppHead) dialCloud() *net.TCPConn {
