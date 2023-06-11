@@ -128,6 +128,10 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 		length := make([]byte, 2)
 		for {
 			n, err := session_conn.Read(length)
+			if err == io.EOF {
+				time.Sleep(time.Millisecond)
+				continue
+			}
 			if err != nil {
 				log.Println(err)
 				break
@@ -139,6 +143,10 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 			lb := binary.BigEndian.Uint16(length)
 			ciphertext := make([]byte, lb)
 			n, err = session_conn.Read(ciphertext)
+			if err == io.EOF {
+				time.Sleep(time.Millisecond)
+				continue
+			}
 			if err != nil {
 				log.Println(err)
 				break
@@ -165,6 +173,10 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 	plaintext := make([]byte, MAX_TCP_BUFFER)
 	for {
 		n, err := service_conn.Read(plaintext)
+		if err == io.EOF {
+			time.Sleep(time.Millisecond)
+			continue
+		}
 		if err != nil {
 			log.Println(err)
 			break

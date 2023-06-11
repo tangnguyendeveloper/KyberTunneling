@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -72,6 +73,10 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 		length := make([]byte, 2)
 		for {
 			n, err := session_conn.Read(length)
+			if err == io.EOF {
+				time.Sleep(time.Millisecond)
+				continue
+			}
 			if err != nil {
 				log.Println(err)
 				break
@@ -83,6 +88,10 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 			lb := binary.BigEndian.Uint16(length)
 			ciphertext := make([]byte, lb)
 			n, err = session_conn.Read(ciphertext)
+			if err == io.EOF {
+				time.Sleep(time.Millisecond)
+				continue
+			}
 			if err != nil {
 				log.Println(err)
 				break
@@ -109,6 +118,10 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	plaintext := make([]byte, MAX_TCP_BUFFER)
 	for {
 		n, err := client_conn.Read(plaintext)
+		if err == io.EOF {
+			time.Sleep(time.Millisecond)
+			continue
+		}
 		if err != nil {
 			log.Println(err)
 			break
