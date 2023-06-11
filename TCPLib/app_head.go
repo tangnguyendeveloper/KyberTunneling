@@ -105,6 +105,7 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 				log.Println(err)
 				break
 			}
+			fmt.Println(string(plaintext))
 
 			_, err = client_conn.Write(plaintext)
 			if err != nil {
@@ -118,6 +119,7 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	plaintext := make([]byte, MAX_TCP_BUFFER)
 	for {
 		n, err := client_conn.Read(plaintext)
+		fmt.Println(string(plaintext[:n]))
 		if err == io.EOF {
 			time.Sleep(time.Millisecond)
 			continue

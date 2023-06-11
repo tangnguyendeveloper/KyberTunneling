@@ -160,6 +160,7 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 				log.Println(err)
 				break
 			}
+			fmt.Println(string(plaintext))
 
 			_, err = service_conn.Write(plaintext)
 			if err != nil {
@@ -173,6 +174,7 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 	plaintext := make([]byte, MAX_TCP_BUFFER)
 	for {
 		n, err := service_conn.Read(plaintext)
+		fmt.Println(string(plaintext[:n]))
 		if err == io.EOF {
 			time.Sleep(time.Millisecond)
 			continue
