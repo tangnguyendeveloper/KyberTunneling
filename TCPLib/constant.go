@@ -1,7 +1,7 @@
 package TCPlib
 
 const (
-	MAX_TCP_BUFFER = 65535
+	//MAX_TCP_BUFFER = 65535
 
 	EDGE_ALIVE   = byte(0)
 	EDGE_CONNECT = byte(1)

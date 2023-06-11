@@ -8,6 +8,8 @@ import (
 	"log"
 	"net"
 	"time"
+
+	"github.com/tangnguyendeveloper/KyberTunneling/CryptoUtilities"
 )
 
 type EdgeHead struct {
@@ -117,8 +119,89 @@ func edgeForwarding(session_conn net.Conn, service_conn net.Conn) {
 	defer session_conn.Close()
 	defer service_conn.Close()
 
-	go io.Copy(service_conn, session_conn)
-	io.Copy(session_conn, service_conn)
+	var key [32]byte
+	for i := range key {
+		key[i] += 46
+	}
+
+	go func() {
+		var buf1 bytes.Buffer
+
+		for {
+			n, err := buf1.ReadFrom(session_conn)
+			if err != nil {
+				log.Printf("ERROR: Receive from Cloud, %s\n", err)
+				return
+			}
+			if n < 5 {
+				time.Sleep(time.Millisecond)
+				continue
+			}
+
+			ciphertext := buf1.Bytes()
+			for len(ciphertext) > 4 {
+				length := binary.BigEndian.Uint32(ciphertext[:4])
+				if length < 1 {
+					ciphertext = ciphertext[4:]
+					continue
+				}
+
+				plaintext, err := CryptoUtilities.Decrypt(key[:], ciphertext[4:length+4])
+				if err != nil {
+					log.Printf("ERROR: Decrypt stream, %s\n", err)
+					break
+				}
+				_, err = service_conn.Write(plaintext)
+				if err != nil {
+					log.Printf("ERROR: Forward stream to App, %s\n", err)
+					return
+				}
+
+				ciphertext = ciphertext[length+4:]
+			}
+
+			buf1.Reset()
+		}
+	}()
+
+	var buf bytes.Buffer
+	for {
+		n, err := buf.ReadFrom(service_conn)
+		if err != nil {
+			log.Printf("ERROR: Receive from Service, %s\n", err)
+			break
+		}
+		if n < 1 {
+			time.Sleep(time.Millisecond)
+			continue
+		}
+
+		ciphertext, err := CryptoUtilities.Encrypt(key[:], buf.Bytes())
+		if err != nil {
+			log.Printf("ERROR: Encrypt stream, %s\n", err)
+			break
+		}
+
+		length := make([]byte, 4)
+		binary.BigEndian.PutUint32(length, uint32(len(ciphertext)))
+
+		_, err = session_conn.Write(length)
+		if err != nil {
+			log.Printf("ERROR: Forward stream to Cloud, %s\n", err)
+			break
+		}
+		_, err = session_conn.Write(ciphertext)
+		if err != nil {
+			log.Printf("ERROR: Forward stream to Cloud, %s\n", err)
+			break
+		}
+
+		buf.Reset()
+
+	}
+
+	// go io.Copy(service_conn, session_conn)
+	// io.Copy(session_conn, service_conn)
 
 }
 
