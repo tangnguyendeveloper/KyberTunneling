@@ -8,8 +8,6 @@ import (
 	"log"
 	"net"
 	"time"
-
-	"github.com/tangnguyendeveloper/KyberTunneling/CryptoUtilities"
 )
 
 type AppHead struct {
@@ -64,95 +62,8 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	defer session_conn.Close()
 	defer client_conn.Close()
 
-	key := []byte("12345678900987654321asdfghjklpoi")
-
-	// go io.Copy(session_conn, client_conn)
-	// io.Copy(client_conn, session_conn)
-
-	go func() {
-		length := make([]byte, 2)
-		for {
-			n, err := session_conn.Read(length)
-			if err == io.EOF {
-				time.Sleep(time.Millisecond)
-				continue
-			}
-			if err != nil {
-				log.Println(err)
-				break
-			}
-			if n != 2 {
-				continue
-			}
-
-			lb := binary.BigEndian.Uint16(length)
-			ciphertext := make([]byte, lb)
-			n, err = session_conn.Read(ciphertext)
-			if err == io.EOF {
-				time.Sleep(time.Millisecond)
-				continue
-			}
-			if err != nil {
-				log.Println(err)
-				break
-			}
-			if uint16(n) != lb {
-				continue
-			}
-
-			plaintext, err := CryptoUtilities.Decrypt(key, ciphertext)
-			if err != nil {
-				log.Println(err)
-				break
-			}
-			fmt.Println(string(plaintext))
-
-			_, err = client_conn.Write(plaintext)
-			if err != nil {
-				log.Println(err)
-				break
-			}
-
-		}
-	}()
-
-	plaintext := make([]byte, MAX_TCP_BUFFER)
-	for {
-		n, err := client_conn.Read(plaintext)
-		fmt.Println(string(plaintext[:n]))
-		if err == io.EOF {
-			time.Sleep(time.Millisecond)
-			continue
-		}
-		if err != nil {
-			log.Println(err)
-			break
-		}
-		if n < 0 {
-			continue
-		}
-
-		ciphertext, err := CryptoUtilities.Encrypt(key, plaintext[:n])
-		if err != nil {
-			log.Println(err)
-			break
-		}
-
-		length := make([]byte, 2)
-		binary.BigEndian.PutUint16(length, uint16(len(ciphertext)))
-
-		_, err = session_conn.Write(length)
-		if err != nil {
-			log.Println(err)
-			break
-		}
-		_, err = session_conn.Write(ciphertext)
-		if err != nil {
-			log.Println(err)
-			break
-		}
-
-	}
+	go io.Copy(session_conn, client_conn)
+	io.Copy(client_conn, session_conn)
 
 }
 
