@@ -8,8 +8,6 @@ import (
 	"log"
 	"net"
 	"time"
-
-	"github.com/tangnguyendeveloper/KyberTunneling/CryptoUtilities"
 )
 
 type AppHead struct {
@@ -64,88 +62,8 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	defer session_conn.Close()
 	defer client_conn.Close()
 
-	var key [32]byte
-	for i := range key {
-		key[i] += 46
-	}
-
-	go func() {
-
-		lb := make([]byte, 4)
-
-		for {
-			n, err := session_conn.Read(lb)
-			if err != io.EOF && err != nil {
-				log.Println(err)
-				break
-			}
-			if n != 4 {
-				time.Sleep(time.Millisecond)
-				continue
-			}
-
-			length := binary.BigEndian.Uint32(lb)
-
-			ciphertext := make([]byte, length)
-			n, err = session_conn.Read(ciphertext)
-			if err != io.EOF && err != nil {
-				log.Println(err)
-				break
-			}
-			if n != int(length) {
-				continue
-			}
-
-			plaintext, err := CryptoUtilities.Decrypt(key[:], ciphertext)
-			if err != nil {
-				log.Printf("ERROR: Decrypt stream, %s\n", err)
-				break
-			}
-
-			_, err = client_conn.Write(plaintext)
-			if err != nil {
-				log.Printf("ERROR: Forward stream to App, %s\n", err)
-				break
-			}
-		}
-	}()
-
-	for {
-
-		plaintext, err := CryptoUtilities.ReadHTTPRequest(client_conn)
-		if err != io.ErrUnexpectedEOF && err != io.EOF && err != nil {
-			log.Println(err)
-			break
-		}
-		if plaintext == nil {
-			time.Sleep(time.Millisecond)
-			continue
-		}
-
-		ciphertext, err := CryptoUtilities.Encrypt(key[:], plaintext)
-		if err != nil {
-			log.Printf("ERROR: Encrypt stream, %s\n", err)
-			break
-		}
-
-		length := make([]byte, 4)
-		binary.BigEndian.PutUint32(length, uint32(len(ciphertext)))
-
-		_, err = session_conn.Write(length)
-		if err != nil {
-			log.Printf("ERROR: Forward stream to Cloud, %s\n", err)
-			break
-		}
-		_, err = session_conn.Write(ciphertext)
-		if err != nil {
-			log.Printf("ERROR: Forward stream to Cloud, %s\n", err)
-			break
-		}
-
-	}
-
-	// go io.Copy(session_conn, client_conn)
-	// io.Copy(client_conn, session_conn)
+	go io.Copy(session_conn, client_conn)
+	io.Copy(client_conn, session_conn)
 
 }
 
