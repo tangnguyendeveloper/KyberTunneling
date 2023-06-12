@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -69,58 +70,59 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 	}
 
 	go func() {
-		var buf1 bytes.Buffer
+
+		lb := make([]byte, 4)
 
 		for {
-			n, err := buf1.ReadFrom(session_conn)
-			if err != nil {
-				log.Printf("ERROR: Receive from Cloud, %s\n", err)
-				return
+			n, err := session_conn.Read(lb)
+			if err != io.EOF && err != nil {
+				log.Println(err)
+				break
 			}
-			if n < 5 {
+			if n != 4 {
 				time.Sleep(time.Millisecond)
 				continue
 			}
 
-			ciphertext := buf1.Bytes()
-			for len(ciphertext) > 4 {
-				length := binary.BigEndian.Uint32(ciphertext[:4])
-				if length < 1 {
-					ciphertext = ciphertext[4:]
-					continue
-				}
+			length := binary.BigEndian.Uint32(lb)
 
-				plaintext, err := CryptoUtilities.Decrypt(key[:], ciphertext[4:length+4])
-				if err != nil {
-					log.Printf("ERROR: Decrypt stream, %s\n", err)
-					break
-				}
-				_, err = client_conn.Write(plaintext)
-				if err != nil {
-					log.Printf("ERROR: Forward stream to App, %s\n", err)
-					return
-				}
-
-				ciphertext = ciphertext[length+4:]
+			ciphertext := make([]byte, length)
+			n, err = session_conn.Read(ciphertext)
+			if err != io.EOF && err != nil {
+				log.Println(err)
+				break
+			}
+			if n != int(length) {
+				continue
 			}
 
-			buf1.Reset()
+			plaintext, err := CryptoUtilities.Decrypt(key[:], ciphertext)
+			if err != nil {
+				log.Printf("ERROR: Decrypt stream, %s\n", err)
+				break
+			}
+
+			_, err = client_conn.Write(plaintext)
+			if err != nil {
+				log.Printf("ERROR: Forward stream to App, %s\n", err)
+				break
+			}
 		}
 	}()
 
-	var buf bytes.Buffer
 	for {
-		n, err := buf.ReadFrom(client_conn)
-		if err != nil {
-			log.Printf("ERROR: Receive from App, %s\n", err)
+
+		plaintext, err := CryptoUtilities.ReadHTTPRequest(client_conn)
+		if err != io.ErrUnexpectedEOF && err != io.EOF && err != nil {
+			log.Println(err)
 			break
 		}
-		if n < 1 {
+		if plaintext == nil {
 			time.Sleep(time.Millisecond)
 			continue
 		}
 
-		ciphertext, err := CryptoUtilities.Encrypt(key[:], buf.Bytes())
+		ciphertext, err := CryptoUtilities.Encrypt(key[:], plaintext)
 		if err != nil {
 			log.Printf("ERROR: Encrypt stream, %s\n", err)
 			break
@@ -139,8 +141,6 @@ func appForwarding(session_conn net.Conn, client_conn net.Conn) {
 			log.Printf("ERROR: Forward stream to Cloud, %s\n", err)
 			break
 		}
-
-		buf.Reset()
 
 	}
 
